@@ -1,2 +1,21 @@
+# Entorns virtuals (molt important no pujar-los)
+venv/
+env/
+.env
+
+# Fitxers de configuració de l'editor
 .vscode/
-.zip
+.idea/
+
+# Arxius temporals de Python
+__pycache__/
+*.pyc
+
+# MODELS ENTRENATS (Fitxers pesants)
+*.zip
+*.pth
+*.h5
+*.onnx
+
+# Logs d'entrenament (si fas servir TensorBoard)
+logs/
