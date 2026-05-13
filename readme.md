@@ -1,52 +1,45 @@
-Com funciona aquest cervell per a l'IA?
-Observació en Vector: L'IA no rep un diccionari; rep una llista de 16 números. Els 5 primers són els daus, els següents 10 són el full d'anotacions i l'últim és el número de tirada.
+Lògica del Sistema de Recompenses (Reward Function)
 
-Espai d'accions combinat:
-
-Si l'IA tria un número de 0 a 31, el programa ho interpreta com "quins daus mantenir" (usant binari, per exemple, el 31 és 11111, tirar-ho tot).
-
-Si tria de 32 a 41, el programa entén que vol anotar en una de les 10 caselles del full.
-
-La Recompensa (Reward):
-
-Li donem punts positius quan anota.
-
-Li donem un -10 si intenta anotar en una casella que ja està plena (així aprendrà a no repetir).
-
-Al final de la partida (10 torns), li donem tota la suma de punts com a gran premi.
+1. Exploració i Tirada de Daus
+Millora de la mà: Cada vegada que l'IA tira els daus i aconsegueix una combinació millor que la que tenia (en potència), rep una petita recompensa calculada com la meitat de la millora dels punts potencials.
+Cost de decisió: Cada tirada té un cost de -0.1. Això evita que l'agent es quedi tirant indefinidament i l'obliga a valorar si realment val la pena arriscar per buscar una jugada millor.
+(pts_act - pts_ant)/2 - 0.1
 
 
-RUTINA D'ENTRENAMENT
+2. Càstig per tirada il·legal: Si l'IA intenta tirar els daus quan ja ha esgotat els 3 intents permesos, rep un càstig sever de -100.
 
-1. Secció rollout/ (El rendiment del joc)
-Això ens diu com li va a l'IA mentre juga les partides de pràctica.
 
-ep_len_mean: És la durada mitjana d'una partida (episodi). Com que la Generala té 10 torns i cada torn té fins a 3 tirades, un valor de 23 és molt normal (indica que fa servir unes 2-3 tirades per torn abans d'anotar).
+3. Gestió d'Errors i Caselles
+Error d'ocupació: Intentar anotar en una casella que ja té punts es penalitza amb -50. Aquesta és la penalització més alta en el joc normal per garantir que l'IA aprengui ràpidament les regles bàsiques de la llibreta de punts.
 
-ep_rew_mean: Aquest és el valor clau. És la puntuació mitjana que treu per partida.
+Cremar jocs grans: Si l'agent decideix anotar un 0 en una casella de joc (Escala, Full, Pòquer o Generala), rep un reward de -20. Això li ensenya que "perdre" una d'aquestes caselles és un error estratègic greu.
 
-Si és negatiu, vol dir que l'IA encara està cometent molts errors "tontos", es menja els càstigs de punts negatius.
+4. Puntuació de Números (1 al 6)
+Per a les caselles de números, utilitzem una fórmula de normalització: 6 * (N - 2) - V.
 
-L'objectiu: Veure com aquest número puja i es torna positiu i cada cop més alt a mesura que avança l'entrenament.
+On:
+N és el nombre de daus iguals.
+V és el valor del dau (de l'1 al 6).
 
-2. Secció train/ (La part matemàtica)
-Això ens diu com s'està ajustant el "cervell" de l'IA.
+Aquesta fórmula és la clau de l'estratègia:
+-Tenir 3 daus o més dóna un reward positiu.
+-Tenir 2 daus dóna un reward lleugerament negatiu (cost d'oportunitat).
+-Tenir 0 o 1 dau castiga l'agent, però el càstig és més lleuger en els números baixos (com l'1) que en els alts (com el 6). Això ensenya a l'IA a fer servir els "1" com a paperera quan la jugada és dolenta.
 
-entropy_loss: Mesura la curiositat o desordre.
 
-Si és un número "gran" (en valor absolut), l'IA està explorant moltes accions diferents (està provant coses).
+4. Puntuació de Jocs (E, F, P, G)
+Quan l'IA anota correctament un joc, la recompensa és el valor total dels punts obtinguts més un Bonus de Coherència:
 
-A mesura que aprengui, aquest número anirà baixant perquè l'IA estarà més segura de què ha de fer i deixarà d'actuar a l'atzar.
+Generala: Punts (fins a 206) + Bonus de 50.
 
-explained_variance: Diu si l'IA entén per què rep recompenses.
+Pòquer: Punts (fins a 96) + Bonus de 40.
 
-A prop de 0: No té ni idea de per què guanya o perd punts (està confosa).
+Full: Punts (70 o 75) + Bonus de 30.
 
-A prop de 1: Entén perfectament el valor de cada jugada. Ara mateix està al principi de tot.
+Escala: Punts (60 o 65) + Bonus de 20.
 
-loss: L'error total de la xarxa neuronal. Normalment baixarà i després s'estabilitzarà.
+L'objectiu d'aquests bonus és que l'IA senti una "satisfacció" immediata molt forta en completar les jugades grans, accelerant l'aprenentatge d'aquestes combinacions complexes.
 
-3. Secció time/ (La velocitat)
-fps: "Frames per second". La teva IA està jugant i aprenent a una velocitat de 610 accions per segon. És una velocitat molt bona per a un ordinador domèstic.
 
-total_timesteps: Quantes interaccions totals ha fet amb el joc des que has començat.
+5. Objectiu Final (Long-term Reward)
+Al final del torn 10 (quan s'acaba la partida), l'IA rep un reward final equivalent a la suma total de tots els punts del seu full. Això serveix per connectar totes les decisions individuals amb l'objectiu definitiu: guanyar la partida amb la màxima puntuació possible.

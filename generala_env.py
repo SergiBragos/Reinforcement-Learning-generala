@@ -153,7 +153,7 @@ class GeneralaEnv(gym.Env):
                     if punts > 0:
                         reward = punts 
                     else:
-                        reward = -50 #és -50 perquè anotar un 0 a una casella gran és molt pitjor que cremar números (cremar arribaria fins a -18).
+                        reward = -20 #és -50 perquè anotar un 0 a una casella gran és molt pitjor que cremar números (cremar arribaria fins a -18).
                     
                     # BONUS DE COHERÈNCIA: Força l'aprenentatge si utilitza la casella correcta
                     if casella_triada == "G" and self.hi_ha_generala: reward += 50
