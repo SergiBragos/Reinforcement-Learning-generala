@@ -1,3 +1,10 @@
+Agent de Reinforcement Learning enfocat a la presa de decisions en el joc de la generala.
+
+Entrenat de moment amb 2.000.000 d'iteracions.
+
+
+___________
+
 Lògica del Sistema de Recompenses (Reward Function)
 
 1. Exploració i Tirada de Daus

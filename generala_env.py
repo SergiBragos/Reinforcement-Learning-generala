@@ -32,7 +32,7 @@ class GeneralaEnv(gym.Env):
         self.hi_ha_trio = 3 in self.valors or 4 in self.valors or 5 in self.valors
         self.hi_ha_parella = 2 in self.valors or 4 in self.valors
         self.hi_ha_full = (3 in self.valors and 2 in self.valors)
-        self.hi_ha_poker = 4 in self.valors or 5 in self.valors
+        self.hi_ha_poker = 4 in self.valors
         self.hi_ha_generala = 5 in self.valors
         self.hi_ha_escala = self.valors in ([1,1,1,1,1,0], [0,1,1,1,1,1], [1,0,1,1,1,1])
 
@@ -69,7 +69,7 @@ class GeneralaEnv(gym.Env):
         if all(tirs):
             self.es_servit = True
         elif any(tirs):
-            self.es_servit = False # Si retira daus més tard, ja no és servit
+            self.es_servit = False # Si tira menys de 5 daus no és servit
 
         for i in range(5):
             if tirs[i]:
@@ -153,7 +153,7 @@ class GeneralaEnv(gym.Env):
                     if punts > 0:
                         reward = punts 
                     else:
-                        reward = -20 #és -50 perquè anotar un 0 a una casella gran és molt pitjor que cremar números (cremar arribaria fins a -18).
+                        reward = -20 #és -20 perquè anotar un 0 a una casella gran és molt pitjor que cremar números (cremar arribaria fins a -18).
                     
                     # BONUS DE COHERÈNCIA: Força l'aprenentatge si utilitza la casella correcta
                     if casella_triada == "G" and self.hi_ha_generala: reward += 50

@@ -11,7 +11,7 @@ model_path = "ppo_generala_model.zip"
 if os.path.exists(model_path):
     print("Model trobat. Carregant per continuar entrenant...")
     # Carreguem el model existent i afegim suport per a TensorBoard
-    model = PPO.load(model_path, env=env, learning_rate=0.0003, ent_coef=0.1)
+    model = PPO.load(model_path, env=env, learning_rate=0.0003, ent_coef=0.01)
 else:
     print("No s'ha trobat cap model previ. Creant-ne un de nou...")
     # Creem un model des de zero amb suport per a TensorBoard
