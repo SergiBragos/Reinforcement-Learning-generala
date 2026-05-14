@@ -12,7 +12,6 @@ __pycache__/
 *.pyc
 
 # MODELS ENTRENATS (Fitxers pesants)
-*.zip
 *.pth
 *.h5
 *.onnx

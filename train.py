@@ -1,5 +1,6 @@
 #train.py
 from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import CheckpointCallback
 from generala_env import GeneralaEnv  # Importem la teva classe
 import os
 
@@ -12,34 +13,25 @@ model_path = "ppo_generala_model.zip"
 if os.path.exists(model_path):
     print("Model trobat. Carregant per continuar entrenant...")
     # Utilitzem custom_objects per sobreescriure l'entropia i el n_steps del fitxer guardat
-    custom_params = {
-        "ent_coef": 0.1,
-        "n_steps": 8192,
-        "learning_rate": 0.0005,
-        "batch_size": 512
-    }
+    custom_params = {"ent_coef": 0.1,"n_steps": 8192,"learning_rate": 0.0003,"batch_size": 512}
     model = PPO.load(model_path, env=env, custom_objects=custom_params)
 
 else:
     print("No s'ha trobat cap model previ. Creant-ne un de nou...")
     # Creem un model des de zero
-    model = PPO(
-        "MlpPolicy", 
-        env, 
-        verbose=1, 
-        learning_rate=0.001, 
-        batch_size=512,
-        n_steps=8192,
-        ent_coef=0.1,
-        policy_kwargs=dict(net_arch=[256, 256, 256]) # Xarxa més profunda
-    )
+    model = PPO("MlpPolicy",env,verbose=1,learning_rate=0.001,batch_size=512,n_steps=8192,ent_coef=0.1,policy_kwargs=dict(net_arch=[256, 256, 256]))
 
 print("Iniciant l'entrenament... Prem Ctrl+C per aturar-lo.")
 
-# 3. Entrenem l'agent
-timesteps = 1000000
-model.learn(total_timesteps=timesteps, tb_log_name="PPO_run")
+# Guarda un checkpoint cada "save_freq" passos
+checkpoint_callback = CheckpointCallback(
+  save_freq=200000, 
+  save_path='./checkpoints/',
+  name_prefix='ppo_generala_model'
+)
 
+# 3. Entrenem l'agent
+model.learn(total_timesteps=2000000, callback=checkpoint_callback)
 # 4. Guardem el model entrenat
 model.save("ppo_generala_model")
 print("Model guardat correctament!")

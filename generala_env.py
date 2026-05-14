@@ -77,7 +77,7 @@ class GeneralaEnv(gym.Env):
         return np.array(estat, dtype=np.float32)
 
     def _executar_tirada(self, tirs):
-        # Determinem si és servit abans de fer la trampa
+        # Determinem si és servit
         if all(tirs):
             self.es_servit = True
         elif any(tirs):
@@ -106,6 +106,26 @@ class GeneralaEnv(gym.Env):
         self.tirada_actual += 1
         self._actualitzar_estat_daus()
 
+    def action_masks(self):
+        # Inicialitzem totes les accions com a False (prohibides)
+        mask = [False] * 42
+        
+        # --- Regles per tirar daus (accions 0-31) ---
+        # Només es pot tirar si la tirada_actual és 0, 1 o 2 (recorda que a la 3a s'ha d'anotar)
+        # També podríem prohibir l'acció 0 (no tirar cap dau) per forçar-lo a jugar.
+        if self.tirada_actual < 3:
+            for i in range(32):
+                mask[i] = True
+        
+        # --- Regles per anotar (accions 32-41) ---
+        # Només es pot anotar en caselles que estiguin buides (-1)
+        claus = list(self.full.keys())
+        for i, casella in enumerate(claus):
+            if self.full[casella] == -1:
+                mask[32 + i] = True
+                
+        return np.array(mask, dtype=bool)
+
     def calcular_punts_lògica(self):
         """Avalua els punts de la mà actual sobre TOTA la taula."""
         # 1. Creem el diccionari per als números (1-6) de forma neta (Dictionary Comprehension)
@@ -124,7 +144,7 @@ class GeneralaEnv(gym.Env):
             
         # 5. PÒQUER (80 punts + valor del dau + 10 si és servit)
         if self.hi_ha_poker and self.full["P"] == -1:
-            # Busquem quin dau té 4 (o 5) repeticions
+            # Busquem quin dau té 4 repeticions
             dau_poker = 0
             if 4 in self.valors:
                 dau_poker = self.valors.index(4) + 1
@@ -138,12 +158,18 @@ class GeneralaEnv(gym.Env):
             
         return p
 
+    def calcular_punts_disponibles(self):
+        punts_teorics = self.calcular_punts_lògica()
+        # Filtrem: si la casella ja està ocupada ( != -1), els punts disponibles són 0
+        punts_reals = {k: (v if self.full[k] == -1 else 0) for k, v in punts_teorics.items()}
+        return punts_reals
+
     def step(self, action):
         reward = 0
         terminated = False
         truncated = False
 
-        punts_tot = self.calcular_punts_lògica()
+        punts_tot = self.calcular_punts_disponibles()
         max_punts_abans = max(punts_tot.values())
 
         # --- CAS 1: L'agent vol tirar els daus i encara pot ---
@@ -151,19 +177,14 @@ class GeneralaEnv(gym.Env):
             tirs = [bool(int(x)) for x in bin(action)[2:].zfill(5)]
             self._executar_tirada(tirs)
             
-            punts_despres = self.calcular_punts_lògica()
+            punts_despres = self.calcular_punts_disponibles()
             max_punts_despres = max(punts_despres.values())
             
             # Recompensa suau per millorar la mà
             reward = (max_punts_despres - max_punts_abans) / 2.0 - 0.1
             return self._get_obs(), reward, terminated, truncated, {}
 
-        # --- CAS 2: L'agent vol tirar però JA HA TIRAT 3 COPS ---
-        elif action < 32 and self.tirada_actual >= 3:
-            reward = -50  # Càstig sever
-            return self._get_obs(), reward, terminated, truncated, {}
-
-        # --- CAS 3: L'agent decideix anotar (action >= 32) ---
+        # --- CAS 2: L'agent decideix anotar (action >= 32) ---
         else:
             # En lloc del mòdul % 32, restem 32 per treure exactament l'índex (0 a 9)
             idx_anotar = action - 32
@@ -172,30 +193,21 @@ class GeneralaEnv(gym.Env):
             claus = list(self.full.keys())
             casella_triada = claus[idx_anotar]
 
-            if self.full[casella_triada] == -1: # Casella lliure (Èxit)
-                punts = punts_tot[casella_triada]
-                self.full[casella_triada] = punts
+            punts = punts_tot[casella_triada]
+            self.full[casella_triada] = punts
 
-                # Càlcul del reward
-                if casella_triada in ["E", "F", "P", "G"]:
-                    if punts > 0:
-                        reward = punts 
-                    else:
-                        reward = -20 #és -20 perquè anotar un 0 a una casella gran és molt pitjor que cremar números (cremar arribaria fins a -18).
+            # Càlcul del reward
+            if casella_triada in ["E", "F", "P", "G"]:
+                if punts > 0:
+                    reward = punts 
                 else:
-                    reward = 6*(punts/int(casella_triada) - 2) - int(casella_triada)
-                    if punts == 0 and max(punts_tot.values()) > 0:
-                        # Si anota un 0 però hi havia alguna casella on feia punts...
-                        reward -= 10  # Càstig per mandrós
+                    reward = -10 * (10-self.torn_actual) #cremar penalitza més a l'inici de la partida.
+            else:
+                reward = 6*(punts/int(casella_triada) - 2) - int(casella_triada)
+                if punts == 0 and max(punts_tot.values()) > 0:
+                    # Si anota un 0 però hi havia alguna casella on feia punts...
+                    reward -= 10  # Càstig per mandrós
             
-            else: # CASELLA OCUPADA (Error d'agent)
-                reward = -20 #és -50 perquè el pitjor valor de no equivocar-se podria ser -18. Equivocar-se ha de ser clarament pitjor.
-                # Busquem la primera lliure i la cremem
-                for c in claus:
-                    if self.full[c] == -1:
-                        self.full[c] = 0
-                        break 
-
             # --- AVANCEM EL TORN ---
             self.torn_actual += 1
             if self.torn_actual > 10:
