@@ -31,7 +31,7 @@ checkpoint_callback = CheckpointCallback(
 )
 
 # 3. Entrenem l'agent
-model.learn(total_timesteps=2000000, callback=checkpoint_callback)
+model.learn(total_timesteps=1000000, callback=checkpoint_callback)
 # 4. Guardem el model entrenat
 model.save("ppo_generala_model")
 print("Model guardat correctament!")
