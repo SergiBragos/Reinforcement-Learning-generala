@@ -4,6 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import random
+from collections import deque
 
 class GeneralaEnv(gym.Env):
     def __init__(self):
@@ -16,8 +17,11 @@ class GeneralaEnv(gym.Env):
         # --- DEFINICIÓ DE L'ESPAI D'OBSERVACIÓ (ESTAT) ---
         # 5 (daus) + 10 (full) + 6 (jocs bool) + 1 (tirada) = 22 variables
         self.observation_space = spaces.Box(
-            low=-1, high=500, shape=(22,), dtype=np.int32
+            low=0.0, high=1.0, shape=(22,), dtype=np.float32
         )
+        
+        # Guardem l'historial de puntuacions de les darreres 100 partides per comparar-hi la puntuació actual i assignar una recompensa en relació a aquesta..
+        self.historial_puntuacions = deque(maxlen=100)
 
         self.reset()
 
@@ -29,8 +33,8 @@ class GeneralaEnv(gym.Env):
                 self.valors[r-1] += 1
         
         # Booleans per a la xarxa neuronal (si es compleix la condició)
-        self.hi_ha_trio = 3 in self.valors or 4 in self.valors or 5 in self.valors
-        self.hi_ha_parella = 2 in self.valors or 4 in self.valors
+        self.hi_ha_parella = 2 in self.valors
+        self.hi_ha_trio = 3 in self.valors
         self.hi_ha_full = (3 in self.valors and 2 in self.valors)
         self.hi_ha_poker = 4 in self.valors
         self.hi_ha_generala = 5 in self.valors
@@ -50,33 +54,57 @@ class GeneralaEnv(gym.Env):
         return self._get_obs(), {}
 
     def _get_obs(self):
-        # 1. Valors del full
-        full_vector = list(self.full.values())
+        # Serveix per a crear un entorn observable per l'agent amb les variables del joc corresponents. 22 variables normalitzades entre 0 i 1.
+                
+        # 1. Normalitzar els valors dels daus entre 0 (1) i 1 (6) // longitud = 5
+        daus_norm = [(d-1.0) / 5.0 if d > 0 else 0.0 for d in self.daus]
+
+        # 2. Valors del full d'anotacions normalitzats entre 0 i 1 // longitud = 10
+        full_vector = [0.0 if self.full[k] == -1 else 1.0 for k in self.full.keys()]
         
-        # 2. Convertim els booleans a 1 o 0 perquè l'IA ho entengui bé com a Box
+        # 3. Convertim els booleans a 1 o 0 perquè l'IA ho entengui bé com a Box // longitud = 6
         jocs_bools = [
             int(self.hi_ha_parella), int(self.hi_ha_trio), 
             int(self.hi_ha_poker), int(self.hi_ha_generala), 
             int(self.hi_ha_escala), int(self.hi_ha_full)
         ]
-        
-        # 3. Concatenem-ho tot en un sol vector de longitud 22
-        estat = self.daus + full_vector + jocs_bools + [self.tirada_actual]
-        return np.array(estat, dtype=np.int32)
+
+        #4. Tirada actual = torn // longitud = 1
+        tirada_norm = [self.tirada_actual / 3.0]
+
+        # 4. Concatenem-ho tot en un sol vector de longitud 22
+        estat = daus_norm + full_vector + jocs_bools + tirada_norm
+        return np.array(estat, dtype=np.float32)
 
     def _executar_tirada(self, tirs):
-        # Només es considera "servit" si és la primera tirada i es tiren tots
+        # Determinem si és servit abans de fer la trampa
         if all(tirs):
             self.es_servit = True
         elif any(tirs):
-            self.es_servit = False # Si tira menys de 5 daus no és servit
+            self.es_servit = False 
 
+        # "Trampa" educativa: 25% de probabilitat a la 2a o 3a tirada
+        fer_trampa = False
+        #fer_trampa = random.randint(1, 4) == 1 and self.tirada_actual > 0
+        
+        # Si fem trampa, busquem quin és el dau més repetit que l'IA ha decidit GUARDAR
+        valor_trampa = None
+        if fer_trampa:
+            daus_guardats = [self.daus[i] for i in range(5) if not tirs[i]]
+            if daus_guardats:
+                # El valor que volem que surti és el que l'IA ja està intentant col·leccionar
+                valor_trampa = max(set(daus_guardats), key=daus_guardats.count)
+
+        # Si fem trampa adaptem la nova tirada al dau més repetit seleccionat abans, si no, la tirada és pura.
         for i in range(5):
             if tirs[i]:
-                self.daus[i] = random.randint(1, 6)
-                
+                if valor_trampa:
+                    self.daus[i] = valor_trampa # El dau "màgic" ajuda a fer la jugada
+                else:
+                    self.daus[i] = random.randint(1, 6)
+                    
         self.tirada_actual += 1
-        self._actualitzar_estat_daus() # Vital: Actualitza l'estat just després de tirar
+        self._actualitzar_estat_daus()
 
     def calcular_punts_lògica(self):
         """Avalua els punts de la mà actual sobre TOTA la taula."""
@@ -132,14 +160,14 @@ class GeneralaEnv(gym.Env):
 
         # --- CAS 2: L'agent vol tirar però JA HA TIRAT 3 COPS ---
         elif action < 32 and self.tirada_actual >= 3:
-            reward = -100  # Càstig sever
+            reward = -50  # Càstig sever
             return self._get_obs(), reward, terminated, truncated, {}
 
         # --- CAS 3: L'agent decideix anotar (action >= 32) ---
         else:
             # En lloc del mòdul % 32, restem 32 per treure exactament l'índex (0 a 9)
             idx_anotar = action - 32
-            idx_anotar = min(idx_anotar, 9) 
+            idx_anotar = min(idx_anotar, 9)
             
             claus = list(self.full.keys())
             casella_triada = claus[idx_anotar]
@@ -147,24 +175,21 @@ class GeneralaEnv(gym.Env):
             if self.full[casella_triada] == -1: # Casella lliure (Èxit)
                 punts = punts_tot[casella_triada]
                 self.full[casella_triada] = punts
-                
+
                 # Càlcul del reward
                 if casella_triada in ["E", "F", "P", "G"]:
                     if punts > 0:
                         reward = punts 
                     else:
                         reward = -20 #és -20 perquè anotar un 0 a una casella gran és molt pitjor que cremar números (cremar arribaria fins a -18).
-                    
-                    # BONUS DE COHERÈNCIA: Força l'aprenentatge si utilitza la casella correcta
-                    if casella_triada == "G" and self.hi_ha_generala: reward += 50
-                    if casella_triada == "P" and self.hi_ha_poker: reward += 40
-                    if casella_triada == "F" and self.hi_ha_full: reward += 30
-                    if casella_triada == "E" and self.hi_ha_escala: reward += 20
                 else:
                     reward = 6*(punts/int(casella_triada) - 2) - int(casella_triada)
+                    if punts == 0 and max(punts_tot.values()) > 0:
+                        # Si anota un 0 però hi havia alguna casella on feia punts...
+                        reward -= 10  # Càstig per mandrós
             
             else: # CASELLA OCUPADA (Error d'agent)
-                reward = -50 #és -50 perquè el pitjor valor de no equivocar-se podria ser -18. Equivocar-se ha de ser clarament pitjor.
+                reward = -20 #és -50 perquè el pitjor valor de no equivocar-se podria ser -18. Equivocar-se ha de ser clarament pitjor.
                 # Busquem la primera lliure i la cremem
                 for c in claus:
                     if self.full[c] == -1:
@@ -176,7 +201,23 @@ class GeneralaEnv(gym.Env):
             if self.torn_actual > 10:
                 terminated = True
                 # Bonus final de la partida
-                reward += sum(v for v in self.full.values() if v > 0)
+                puntuacio_final = sum(v for v in self.full.values() if v > 0)
+                reward += puntuacio_final
+                # 2. Lògica de l'Agent Fantasma (Competició contra la mitjana)
+                if len(self.historial_puntuacions) >= 20: # Necessitem una base mínima per comparar
+                    mitjana_recent = sum(self.historial_puntuacions) / len(self.historial_puntuacions)
+                    bonus_superacio = puntuacio_final - mitjana_recent
+                    # Bonus o penalització per rendiment relatiu
+                    # Si supera la seva mitjana, li donem un impuls extra
+                    if puntuacio_final > mitjana_recent:
+                        # Bonus proporcional a com de millor ho ha fet
+                        reward += max(bonus_superacio, 10) # Almenys +10 si guanya
+                    else:
+                        # Penalització si s'ha quedat per sota del seu estàndard
+                        reward += min(bonus_superacio, -10) # Almenys -10 si perd
+
+                # 3. Actualitzem l'historial amb la partida actual
+                self.historial_puntuacions.append(puntuacio_final)
             else:
                 self.tirada_actual = 0
                 self._executar_tirada([True, True, True, True, True])

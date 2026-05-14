@@ -1,8 +1,6 @@
 Agent de Reinforcement Learning enfocat a la presa de decisions en el joc de la generala.
 
 Entrenat de moment amb 2.000.000 d'iteracions.
-
-
 ___________
 
 Lògica del Sistema de Recompenses (Reward Function)
@@ -50,3 +48,31 @@ L'objectiu d'aquests bonus és que l'IA senti una "satisfacció" immediata molt 
 
 5. Objectiu Final (Long-term Reward)
 Al final del torn 10 (quan s'acaba la partida), l'IA rep un reward final equivalent a la suma total de tots els punts del seu full. Això serveix per connectar totes les decisions individuals amb l'objectiu definitiu: guanyar la partida amb la màxima puntuació possible.
+_________________
+
+PARÀMETRES DE L'ENTRENAMENT
+
+1. Rollout (Rendiment en el joc)
+ep_len_mean (27.1): Indica quants steps (accions) fa l'IA per acabar una partida de 10 torns.
+
+Com que el màxim teòric són 30 (3 accions per torn) i el mínim són 10 (anotar directament), un 27.1 vol dir que l'IA està aprofitant gairebé totes les tirades. No s'està rendint ràpidament, sinó que busca millorar la mà.
+
+ep_rew_mean (65.7): És la mitjana de recompensa per partida.
+
+Encara és baixa. Tenint en compte que una sola Generala ja pot donar més de 200 punts, aquest 65.7 indica que l'IA encara crema moltes caselles o rep moltes penalitzacions de -50 per triar caselles ocupades. Està en la fase de "deixar de castigar-se a si mateixa".
+
+2. Train (Salut de l'aprenentatge)
+entropy_loss (-2.71): Mesura el grau de "caos" o curiositat.
+
+Si aquest número és alt (com ara), vol dir que l'IA encara està experimentant amb accions aleatòries. A mesura que aprengui, aquest número anirà pujant cap a 0 (es tornarà més determinista).
+
+explained_variance (0.036): Aquest és el punt més crític ara mateix.
+
+Mesura si l'IA entén per què rep els punts. Un valor proper a 0 (com el teu) vol dir que l'IA encara no sap predir si la seva jugada serà bona o dolenta. És normal en aquesta fase, però hauria de pujar cap a 0.5 - 0.9 a mesura que avanci l'entrenament.
+
+value_loss (6.96e+03): És una pèrdua molt alta.
+
+Això passa perquè has posat recompenses molt grans (els bonus de +50 i el sumatori final). La xarxa neuronal està rebent "impactes" molt forts de reward i està intentant ajustar-se. No t'espantis, anirà baixant.
+
+3. Time (Eficiència)
+fps (417): L'entorn és molt ràpid! Està processant 417 accions per segon. Això és genial, vol dir que pots deixar-la entrenant un milió de passos i ho farà en un temps raonable.

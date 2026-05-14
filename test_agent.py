@@ -1,71 +1,85 @@
 import gymnasium as gym
 from stable_baselines3 import PPO
-from generala_env import GeneralaEnv  # Assegura't que el fitxer es diu així
-import numpy as np
-import random
+from generala_env import GeneralaEnv
+import os
 
-def traduir_accio_daus(action):
-    """Converteix l'acció 0-31 en un text llegible de quins daus es guarden."""
-    tirs = [bool(int(x)) for x in bin(action)[2:].zfill(5)]
-    daus_text = ["TIRAR" if t else "GUARDAR" for t in tirs]
-    return daus_text
+def formatar_full(full):
+    """Retorna una cadena visual de l'estat del full d'anotacions."""
+    items = []
+    for k, v in full.items():
+        val = v if v != -1 else "-"
+        items.append(f"{k}:{val}")
+    return " | ".join(items)
 
-def simular_torn(model_path, daus_inicials=None):
-    # 1. Carregar l'entorn i el model
+def jugar_partida(model_path):
+    if not os.path.exists(model_path):
+        print(f"❌ Error: No s'ha trobat el model a {model_path}")
+        return
+
+    # 1. Carregar entorn i model una sola vegada
     env = GeneralaEnv()
     model = PPO.load(model_path)
     
     obs, _ = env.reset()
+    terminated = False
+    truncated = False
     
-    # 2. Forçar una situació inicial (si es vol provar quelcom específic)
-    if daus_inicials:
-        env.daus = daus_inicials
-        env._actualitzar_estat_daus()
-        obs = env._get_obs()
+    print("="*60)
+    print("🎲 INICI DE LA PARTIDA DE GENERALA 🎲")
+    print("="*60)
 
-    print("--- INICI DEL SIMULADOR DE DECISIONS ---")
-    print(f"Daus inicials: {env.daus}")
-    print(f"Estat del full: {env.full}")
-    print("-" * 40)
-
-    finalitzat = False
+    num_torn = 1
     
-    while not finalitzat:
-        # L'agent prediu l'acció (deterministic=True per evitar aleatorietat)
-        action, _states = model.predict(obs, deterministic=True)
+    while not (terminated or truncated):
+        print(f"\n🔹 TORN {num_torn}/10")
+        final_del_torn = False
         
-        # --- LÒGICA DE TIRAR (Acció 0-31) ---
-        if action < 32:
-            instruccio = traduir_accio_daus(action)
-            print(f"➤ L'agent decideix TIRAR (Torn {env.tirada_actual}/3)")
-            print(f"   Acció {action}: {instruccio}")
+        while not final_del_torn:
+            # Predicció de l'agent
+            action, _states = model.predict(obs, deterministic=True)
             
-            obs, reward, terminated, truncated, info = env.step(action)
-            print(f"   Nous daus: {env.daus} (Recompensa: {reward:.2f})")
+            # --- DECISIÓ: TIRAR ---
+            if action < 32:
+                # Traduïm quins daus es queden
+                # Si el bit és 1, es tira. Si és 0, es guarda.
+                bits = [int(x) for x in bin(action)[2:].zfill(5)]
+                decisio_text = []
+                for i in range(5):
+                    status = "🔄" if bits[i] == 1 else "✅"
+                    decisio_text.append(f"D{i+1}:{env.daus[i]}{status}")
+                
+                print(f"  Tirada {env.tirada_actual}/3 | Daus: {env.daus}")
+                print(f"  ↳ Decisió: {' '.join(decisio_text)} (Tirar els 🔄)")
+                
+                obs, reward, terminated, truncated, info = env.step(action)
 
-        # --- LÒGICA D'ANOTAR (Acció 32-41) ---
-        else:
-            claus = list(env.full.keys())
-            casella = claus[action - 32]
-            print(f"🏁 L'agent decideix ANOTAR a la casella: '{casella}'")
-            
-            obs, reward, terminated, truncated, info = env.step(action)
-            print(f"   Punts obtinguts: {env.full[casella]}")
-            print(f"   Recompensa de l'acció: {reward:.2f}")
-            finalitzat = True
+            # --- DECISIÓ: ANOTAR ---
+            else:
+                claus = list(env.full.keys())
+                casella = claus[action - 32]
+                
+                # Guardem els daus abans de l'anotació per al log
+                daus_finals = env.daus.copy()
+                
+                obs, reward, terminated, truncated, info = env.step(action)
+                
+                punts = env.full[casella]
+                print(f"  Tirada FINAL | Daus: {daus_finals}")
+                print(f"  🎯 ANOTACIÓ: L'agent posa {punts} punts a la casella [{casella}]")
+                print(f"  📋 Full actual: {formatar_full(env.full)}")
+                print("-" * 40)
+                
+                final_del_torn = True
+                num_torn += 1
 
-        print("-" * 20)
-
-    print("--- FI DEL TORN ---")
+    # --- FINAL DE PARTIDA ---
+    print("\n" + "="*60)
+    print("🏁 FINAL DE LA PARTIDA")
+    puntuacio_total = sum(v for v in env.full.values() if v > 0)
+    print(f"📊 PUNTUACIÓ FINAL: {puntuacio_total} PUNTS")
+    print(f"📋 Full final: {formatar_full(env.full)}")
+    print("="*60)
 
 if __name__ == "__main__":
-    # Posa aquí el camí al teu fitxer .zip del model entrenat
     PATH_MODEL = "ppo_generala_model.zip" 
-    
-    #situacio_especifica = [1,1,1,1,1]
-    
-    try:
-        #simular_torn(PATH_MODEL, daus_inicials=situacio_especifica)
-        simular_torn(PATH_MODEL)
-    except FileNotFoundError:
-        print(f"Error: No s'ha trobat el model a {PATH_MODEL}. Entrena l'agent primer!")
+    jugar_partida(PATH_MODEL)

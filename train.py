@@ -7,15 +7,32 @@ import os
 env = GeneralaEnv()
 model_path = "ppo_generala_model.zip"
 
+
 # Comprovem si el fitxer existeix
 if os.path.exists(model_path):
     print("Model trobat. Carregant per continuar entrenant...")
-    # Carreguem el model existent i afegim suport per a TensorBoard
-    model = PPO.load(model_path, env=env, learning_rate=0.0003, ent_coef=0.01)
+    # Utilitzem custom_objects per sobreescriure l'entropia i el n_steps del fitxer guardat
+    custom_params = {
+        "ent_coef": 0.1,
+        "n_steps": 8192,
+        "learning_rate": 0.0005,
+        "batch_size": 512
+    }
+    model = PPO.load(model_path, env=env, custom_objects=custom_params)
+
 else:
     print("No s'ha trobat cap model previ. Creant-ne un de nou...")
-    # Creem un model des de zero amb suport per a TensorBoard
-    model = PPO("MlpPolicy", env, verbose=1, learning_rate=0.001, ent_coef=0.1)
+    # Creem un model des de zero
+    model = PPO(
+        "MlpPolicy", 
+        env, 
+        verbose=1, 
+        learning_rate=0.001, 
+        batch_size=512,
+        n_steps=8192,
+        ent_coef=0.1,
+        policy_kwargs=dict(net_arch=[256, 256, 256]) # Xarxa més profunda
+    )
 
 print("Iniciant l'entrenament... Prem Ctrl+C per aturar-lo.")
 
